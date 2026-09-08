@@ -1,0 +1,4 @@
+interface:
+  display_name: "Formal Spec"
+  short_description: "Drive implementation with Lean proofs"
+  default_prompt: "Use $formal-spec to design this change proof-first and retain its guarantees."
