@@ -59,7 +59,7 @@ def load_manifest(path: Path) -> dict:
         raise ProvenanceError("manifest root must be an object")
     if set(value) != {"version", "bindings", "proofs"}:
         raise ProvenanceError("manifest fields must be exactly: version, bindings, proofs")
-    if value["version"] != 1:
+    if type(value["version"]) is not int or value["version"] != 1:
         raise ProvenanceError("manifest version must be 1")
     if not isinstance(value["bindings"], list) or not isinstance(value["proofs"], list):
         raise ProvenanceError("bindings and proofs must be arrays")

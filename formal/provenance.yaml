@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "bindings": [
+    {
+      "id": "skill-workflow-model",
+      "source": "SKILL.md",
+      "source_anchor": "## Follow the proof-first loop",
+      "source_sha256": "2e06dbf89c882a113ff7e124b23d9f05392e0d26ef5c79e4c3e005c088aef4e4",
+      "model": "formal/model/SKILL.lean",
+      "model_anchor": "def workflowModel"
+    },
+    {
+      "id": "provenance-checker-model",
+      "source": "scripts/check_provenance.py",
+      "source_anchor": "def validate(manifest: dict, root: Path)",
+      "source_sha256": "ee2583e6d7faba59b20c16867e365f385d9374f08424fc6c35ffaaf28278c5d3",
+      "model": "formal/model/scripts/check_provenance.lean",
+      "model_anchor": "def validateModel"
+    }
+  ],
+  "proofs": [
+    {
+      "id": "proof-first-workflow",
+      "spec": "formal/spec/Workflow.lean",
+      "spec_anchor": "def proofFirstInvariant",
+      "model": "formal/model/SKILL.lean",
+      "model_anchor": "def workflowModel",
+      "proof": "formal/proof/Workflow.lean",
+      "proof_anchor": "theorem reachable_implementation_has_current_proof"
+    },
+    {
+      "id": "provenance-traceability",
+      "spec": "formal/spec/Provenance.lean",
+      "spec_anchor": "def Valid",
+      "model": "formal/model/scripts/check_provenance.lean",
+      "model_anchor": "def validateModel",
+      "proof": "formal/proof/Provenance.lean",
+      "proof_anchor": "theorem validateModel_correct"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
 LibSpec/.lake/
+formal/.lake/
+formal/.formal-spec/
 __pycache__/
 *.pyc

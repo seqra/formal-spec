@@ -81,6 +81,22 @@ class ProvenanceCheckerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("source hash changed", result.stderr)
 
+    def test_rejects_boolean_version(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="formal-provenance-") as temporary:
+            project = Path(temporary)
+            manifest = self.make_project(project)
+            contents = json.loads(manifest.read_text(encoding="utf-8"))
+            contents["version"] = True
+            manifest.write_text(json.dumps(contents), encoding="utf-8")
+            result = self.run_checker(project, manifest)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("manifest version must be 1", result.stderr)
+
+    def test_checker_source_has_no_process_execution(self) -> None:
+        source = CHECKER.read_text(encoding="utf-8")
+        self.assertNotIn("import subprocess", source)
+        self.assertNotIn("os.system", source)
+
 
 if __name__ == "__main__":
     unittest.main()

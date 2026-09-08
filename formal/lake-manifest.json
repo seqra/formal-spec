@@ -1,0 +1,13 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "libspec",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": ".formal-spec/LibSpec",
+   "configFile": "lakefile.toml"}],
+ "name": "«formal-spec-formal»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

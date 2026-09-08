@@ -16,6 +16,22 @@ class RepositoryLayoutTests(unittest.TestCase):
         self.assertFalse((ROOT / "backends").exists())
         self.assertFalse((ROOT / "formal-spec").exists())
 
+    def test_repository_uses_its_own_formal_layout(self) -> None:
+        for path in (
+            "formal/model.lean",
+            "formal/spec.lean",
+            "formal/proof.lean",
+            "formal/provenance.yaml",
+            "formal/model/SKILL.lean",
+            "formal/model/scripts/check_provenance.lean",
+            "formal/spec/Workflow.lean",
+            "formal/spec/Provenance.lean",
+            "formal/proof/Workflow.lean",
+            "formal/proof/Provenance.lean",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,7 @@ fi
 
 if command -v rg >/dev/null 2>&1; then
   if rg -n '^[[:space:]]*(axiom|unsafe|sorry|admit)([[:space:]]|$)' \
-      "$skill_dir/LibSpec" -g '*.lean'; then
+      "$skill_dir/LibSpec" "$skill_dir/formal" -g '*.lean'; then
     echo "unchecked Lean declaration or placeholder found" >&2
     exit 1
   fi
@@ -21,6 +21,17 @@ fi
   cd "$skill_dir/LibSpec"
   lake build
 )
+python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir"
+python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir" --check
+(
+  cd "$skill_dir/formal"
+  lake build
+)
+if [ -f "$skill_dir/formal/provenance.yaml" ]; then
+  python3 "$skill_dir/scripts/check_provenance.py" \
+    "$skill_dir/formal/provenance.yaml" --root "$skill_dir" \
+    --html "$skill_dir/formal/.formal-spec/provenance.html"
+fi
 python3 -m unittest discover -s "$skill_dir/tests" -p 'test_*.py'
 
 echo "formal-spec skill check passed"

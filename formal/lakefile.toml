@@ -1,0 +1,11 @@
+name = "formal-spec-formal"
+version = "0.1.0"
+defaultTargets = ["FormalSpecFormal"]
+
+[[require]]
+name = "libspec"
+path = ".formal-spec/LibSpec"
+
+[[lean_lib]]
+name = "FormalSpecFormal"
+roots = ["model", "spec", "proof"]
