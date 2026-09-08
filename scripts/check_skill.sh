@@ -21,12 +21,21 @@ fi
   cd "$skill_dir/LibSpec"
   lake build
 )
-python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir"
+python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir" --force
 python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir" --check
 (
   cd "$skill_dir/formal"
   lake build
 )
+spec_report="$skill_dir/formal/.formal-spec/spec.md"
+(
+  cd "$skill_dir/formal"
+  lake exe describe-spec > "$spec_report"
+)
+if [ ! -s "$spec_report" ]; then
+  echo "describe-spec produced an empty report: $spec_report" >&2
+  exit 1
+fi
 if [ -f "$skill_dir/formal/provenance.yaml" ]; then
   python3 "$skill_dir/scripts/check_provenance.py" \
     "$skill_dir/formal/provenance.yaml" --root "$skill_dir" \

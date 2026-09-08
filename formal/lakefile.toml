@@ -9,3 +9,7 @@ path = ".formal-spec/LibSpec"
 [[lean_lib]]
 name = "FormalSpecFormal"
 roots = ["model", "spec", "proof"]
+
+[[lean_exe]]
+name = "describe-spec"
+root = "describe"

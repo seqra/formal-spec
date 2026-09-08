@@ -59,6 +59,24 @@ a mismatch as a source defect, model defect, false assumption, missing case, or
 authorized requirement change before editing normative meaning. Retain
 counterexamples as a theorem, test, or modeled boundary case.
 
+## Describe specifications for readers
+
+Read [references/descriptions.md](references/descriptions.md) when a project
+needs a human-readable view of its specifications. A Lean declaration remains
+the normative artifact; its declaration docstring is explanatory metadata. The
+`describe-spec` Lean executable consumes an explicit registry of public spec
+declarations and writes a replaceable Markdown report under
+`formal/.formal-spec/spec.md` when requested. Generate that report on demand
+after the formal package builds; do not edit or treat it as a second source of
+truth.
+
+The report should show both the docstring and the exact formal statement, with
+links or source locations where available. A prose description is not a proof
+of the declaration and a generated report does not establish model/source
+correspondence. Do not infer descriptions by scanning every definition, by
+translating arbitrary Lean expressions into English, or by deriving intent
+from a model or proof.
+
 ## Connect proofs to source without a backend
 
 Read [references/provenance.md](references/provenance.md) when a model is added

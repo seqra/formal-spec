@@ -131,6 +131,32 @@ The checker contract is deliberately stated as a conjunction of independently
 auditable obligations.  The final two clauses are the graph-coverage rules:
 every proof uses a registered model and every registered model has a proof.
 -/
+/--
+The predicate below is the readable provenance contract for one manifest and
+one abstract filesystem/text/digest view.
+
+Boundary:
+* Included are manifest identity uniqueness, source/model/spec/proof file and
+  anchor observations, source digest equality, and complete model/proof graph
+  coverage.
+* An accepted case has unique IDs and model bindings, valid anchored records,
+  proofs that use bound models, and at least one proof for every bound model.
+* A rejected case includes a duplicate ID or model binding, a missing file or
+  anchor, a malformed or stale source digest, an unbound proof model, or a
+  bound model without a proof.
+
+Assumptions:
+* `View` faithfully reports the results of project-root path resolution,
+  UTF-8 text reads, literal anchor search, and SHA-256 computation.
+* `Manifest` is already typed and has passed the JSON-compatible parsing
+  boundary represented by the Python loader.
+
+Exclusions:
+* This contract does not prove the operating system, Python implementation, or
+  source-language semantics behind those observations.
+* A matching source hash and existing anchors establish identity and
+  traceability only; they do not prove source/model semantic correspondence.
+-/
 def Valid (view : View) (manifest : Manifest) : Prop :=
   (AllIds manifest).Nodup ∧
   (BoundModels manifest).Nodup ∧

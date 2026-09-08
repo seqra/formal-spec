@@ -5,7 +5,7 @@
       "id": "skill-workflow-model",
       "source": "SKILL.md",
       "source_anchor": "## Follow the proof-first loop",
-      "source_sha256": "2e06dbf89c882a113ff7e124b23d9f05392e0d26ef5c79e4c3e005c088aef4e4",
+      "source_sha256": "221f890cff5d692a3bcce985d73c1cba06c8e03052e32c11c35601535eef58b8",
       "model": "formal/model/SKILL.lean",
       "model_anchor": "def workflowModel"
     },
