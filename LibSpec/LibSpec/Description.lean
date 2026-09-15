@@ -69,6 +69,9 @@ private def contextualName (env : Environment) (context : Array Name) (name : Na
 private def isSemanticName (roots : Array Name) (name : Name) : Bool :=
   roots.any (fun root => root.getPrefix.isPrefixOf name) || (`LibSpec).isPrefixOf name
 
+private def libraryLabel (name : Name) : String :=
+  humanize ((nameParts name).getLast?.getD name.toString)
+
 private def isGeneratedName (name : Name) : Bool :=
   let rendered := name.toString
   let leaf := nameParts name |>.getLast?.getD ""
@@ -127,6 +130,36 @@ private partial def renderTypeNoun (env : Environment) (context : Array Name) (e
             return s!"a transition system over {state}, driven by {input}"
           return "a " ++ contextualName env context name
 
+/-- A binder the author left anonymous carries a compiler-generated name. Naming it after its
+type keeps the sentence readable instead of quoting an internal identifier. -/
+private def isInternalName (name : Name) : Bool :=
+  name.hasMacroScopes || (name.toString.splitOn "_hyg").length > 1 ||
+    (name.toString.splitOn "._@").length > 1 || (name.toString.splitOn "✝").length > 1
+
+private def withoutArticle (noun : String) : String :=
+  if noun.startsWith "a " then (noun.drop 2).toString
+  else if noun.startsWith "an " then (noun.drop 3).toString
+  else noun
+
+private def readableBinder (binder : Name) (noun : String) : Name :=
+  if !isInternalName binder then binder else
+  let trimmed :=
+    if noun.startsWith "a " then (noun.drop 2).toString
+    else if noun.startsWith "an " then (noun.drop 3).toString
+    else noun
+  Name.mkSimple (if trimmed.isEmpty then "value" else trimmed.replace " " "_")
+
+/-- The arguments a reader sees: a type or instance argument is machinery, not meaning. -/
+private def explicitArguments (function : Expr) (arguments : Array Expr) : MetaM (Array Expr) := do
+  let info ← getFunInfoNArgs function arguments.size
+  let mut kept : Array Expr := #[]
+  for index in [0 : arguments.size] do
+    if index < info.paramInfo.size then
+      if info.paramInfo[index]!.binderInfo.isExplicit then kept := kept.push arguments[index]!
+    else
+      kept := kept.push arguments[index]!
+  return kept
+
 private partial def renderExpression (roots : Array Name) (env : Environment) (context : Array Name)
     (expression : Expr) : TermElabM (Option String) := do
   if let some value := expression.rawNatLit? then return some (toString value)
@@ -134,16 +167,24 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
   match expression with
   | .lit (.natVal value) => return some (toString value)
   | .lit (.strVal value) => return some s!"“{value}”"
-  | .fvar id => return some (humanize (← id.getUserName).toString)
+  | .fvar id =>
+      let userName ← id.getUserName
+      if isInternalName userName then
+        let noun ← renderTypeNoun env context (← id.getType)
+        let trimmed := withoutArticle noun
+        return some (if trimmed.isEmpty then "the value" else trimmed)
+      return some (humanize userName.toString)
   | .const name _ =>
       if name == ``True then return some "true"
       if name == ``False then return some "false"
       if isSemanticName roots name then return some (contextualName env context name)
       return none
-  | .forallE binder domain body binderInfo =>
+  | .forallE binder domain body binderInfo => do
+      let binder := readableBinder binder (← renderTypeNoun env context domain)
       withLocalDecl binder binderInfo domain fun localValue => do
         let renderedBody ← renderExpression roots env context (body.instantiate1 localValue)
         let some renderedBody := renderedBody | return none
+        if binderInfo == .instImplicit then return some renderedBody
         if !body.hasLooseBVar 0 && (← isProp domain) then
           let some renderedDomain ← renderExpression roots env context domain | return none
           return some s!"if {renderedDomain}, then {renderedBody}"
@@ -175,6 +216,7 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
       if name == ``Eq && arguments.size == 3 then
         let some left ← renderExpression roots env context arguments[1]! | return none
         let some right ← renderExpression roots env context arguments[2]! | return none
+        if right == "nothing" then return some s!"{left} is empty"
         return some s!"{left} equals {right}"
       if name == ``And && arguments.size == 2 then
         let some left ← renderExpression roots env context arguments[0]! | return none
@@ -183,6 +225,8 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
       if name == ``Or && arguments.size == 2 then
         let some left ← renderExpression roots env context arguments[0]! | return none
         let some right ← renderExpression roots env context arguments[1]! | return none
+        if (left.splitOn ", ").length > 1 || (right.splitOn ", ").length > 1 then
+          return some s!"{left}; or else {right}"
         return some s!"{left}, or {right}"
       if name == ``Iff && arguments.size == 2 then
         let some left ← renderExpression roots env context arguments[0]! | return none
@@ -194,10 +238,22 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
       if name == ``Ne && arguments.size == 3 then
         let some left ← renderExpression roots env context arguments[1]! | return none
         let some right ← renderExpression roots env context arguments[2]! | return none
+        if right == "nothing" then return some s!"{left} is not empty"
         return some s!"{left} does not equal {right}"
       if name == ``Option.some && arguments.size == 2 then
         return ← renderExpression roots env context arguments[1]!
       if name == ``Option.none then return some "no value"
+      if name == ``List.nil then return some "nothing"
+      if (name == ``ite || name == ``dite) && arguments.size >= 5 then
+        let some condition ← renderExpression roots env context arguments[1]! | return none
+        let some yes ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some no ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"if {condition} then {yes}, and otherwise {no}"
+      if name == ``List.cons && arguments.size >= 2 then
+        let some head ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some tail ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        if tail == "nothing" then return some s!"just {head}"
+        return some s!"{head} followed by {tail}"
       if name == ``Nat.add && arguments.size == 2 then
         let some left ← renderExpression roots env context arguments[0]! | return none
         let some right ← renderExpression roots env context arguments[1]! | return none
@@ -214,6 +270,74 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         let some system ← renderExpression roots env context arguments[arguments.size - 2]! | return none
         let some property ← renderExpression roots env context arguments[arguments.size - 1]! | return none
         return some s!"{system} preserves {property} after every permitted transition"
+      if name == ``Exists && arguments.size == 2 then
+        match arguments[1]! with
+        | .lam binder domain body binderInfo =>
+            let rendered ← withLocalDecl binder binderInfo domain fun localValue => do
+              let body ← renderExpression roots env context (body.instantiate1 localValue)
+              let some body := body | return none
+              let binderLabel := humanize binder.toString
+              let domainLabel ← renderTypeNoun env context domain
+              return some s!"there is {domainLabel} {binderLabel} for which {body}"
+            return rendered
+        | _ => return none
+      if name == ``Membership.mem && arguments.size >= 2 then
+        let some collection ← renderExpression roots env context arguments[arguments.size - 2]!
+          | return none
+        let some element ← renderExpression roots env context arguments[arguments.size - 1]!
+          | return none
+        return some s!"{element} is one of {collection}"
+      if name == ``LE.le && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} is at most {right}"
+      if name == ``LT.lt && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} is less than {right}"
+      if name == ``GE.ge && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} is at least {right}"
+      if name == ``GT.gt && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} is greater than {right}"
+      if name == `HSub.hSub && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} less {right}"
+      if (name == ``List.length || name == ``String.length) && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the length of {value}"
+      if name == ``List.Nodup && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{value} holds nothing twice"
+      if name == ``List.Sublist && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} is {right} with entries left out"
+      if name == ``String.toList && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the characters of {value}"
+      if name == ``List.map && arguments.size >= 2 then
+        let some transform ← renderExpression roots env context arguments[arguments.size - 2]!
+          | return none
+        let some collection ← renderExpression roots env context arguments[arguments.size - 1]!
+          | return none
+        return some s!"the {transform} of each of {collection}"
+      if name == ``List.sum && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the total of {value}"
+      if name == ``Prod.fst && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the first part of {value}"
+      if name == ``Prod.snd && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the second part of {value}"
+      if name == ``List.head? && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the first entry of {value}"
       if isSemanticName roots name && !isGeneratedName name then
         if let some (.ctorInfo constructor) := env.find? name then
           if let some structureInfo := getStructureInfo? env constructor.induct then
@@ -226,7 +350,8 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
               renderedFields := renderedFields ++ [s!"{fieldLabel} equals {renderedValue}"]
             let structureLabel := contextualName env context constructor.induct
             return some <| structureLabel ++ " where " ++ String.intercalate ", " renderedFields
-        let renderedArguments ← arguments.filterMapM (renderExpression roots env context)
+        let shown ← explicitArguments expression.getAppFn arguments
+        let renderedArguments ← shown.filterMapM (renderExpression roots env context)
         let label := contextualName env context name
         if renderedArguments.isEmpty then return some label
         return some <| label ++ " of " ++ String.intercalate ", " renderedArguments.toList
@@ -237,8 +362,15 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
           if renderedArguments.isEmpty then return some functionLabel
           return some <| functionLabel ++ " of " ++ String.intercalate ", " renderedArguments.toList
       | _ => pure ()
+      if !isGeneratedName name && env.contains name then
+        let shown ← explicitArguments expression.getAppFn arguments
+        let renderedArguments ← shown.filterMapM (renderExpression roots env context)
+        let label := libraryLabel name
+        if renderedArguments.isEmpty then return some label
+        return some <| label ++ " of " ++ String.intercalate ", " renderedArguments.toList
       return none
-  | .lam binder domain body binderInfo =>
+  | .lam binder domain body binderInfo => do
+      let binder := readableBinder binder (← renderTypeNoun env context domain)
       withLocalDecl binder binderInfo domain fun localValue =>
         renderExpression roots env context (body.instantiate1 localValue)
   | .letE binder type value body _ =>
@@ -246,6 +378,26 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         renderExpression roots env context (body.instantiate1 localValue)
   | .mdata _ body | .proj _ _ body => renderExpression roots env context body
   | _ => return none
+
+/-- Whether a definition's body is compiler-built recursion machinery rather than what the
+author wrote. Such a body describes how the recursion is justified, not what the function means. -/
+private def usesRecursionMachinery (value : Expr) : Bool :=
+  value.getUsedConstants.any fun name =>
+    let rendered := name.toString
+    rendered.endsWith ".brecOn" || rendered.endsWith ".rec" || rendered.endsWith ".recOn" ||
+      rendered.endsWith ".below" || rendered.startsWith "WellFounded."
+
+/-- The cases an author wrote a recursive definition as, taken from its equations. -/
+private def equationMeanings (roots : Array Name) (env : Environment) (context : Array Name)
+    (name : Name) : TermElabM (Option (List String)) := do
+  let some equations ← getEqnsFor? name | return none
+  let mut rendered : List String := []
+  for equation in equations do
+    let some info := env.find? equation | return none
+    let some line ← renderExpression roots env context info.type | return none
+    rendered := rendered ++ [line]
+  if rendered.isEmpty then return none
+  return some rendered
 
 private def returnsProp (type : Expr) : TermElabM Bool :=
   forallTelescopeReducing type fun _ result => do
@@ -280,6 +432,15 @@ private def declarationMeaning (roots : Array Name) (env : Environment) (context
       else
         match info.value? (allowOpaque := true) with
         | some value =>
+            if usesRecursionMachinery value then
+              match ← equationMeanings roots env context info.name with
+              | some cases =>
+                  return s!"{label} is given case by case: " ++
+                    String.intercalate "; " cases ++ "."
+              | none =>
+                  let noun ← forallTelescopeReducing info.type fun _ result =>
+                    renderTypeNoun env context result
+                  return s!"{label} defines {noun}, case by case over its argument."
             match ← renderExpression roots env context value with
             | some meaning => return s!"{label} means {meaning}."
             | none =>
@@ -375,8 +536,16 @@ private def renderRule (label meaning : String) : Option String := do
   some <| "**Applies when**\n\n" ++ bullets conditions ++
     "\n\n**Must hold**\n\n" ++ bullets guarantees
 
+private def connectiveMarkers : List String :=
+  [", and ", ", or ", ", then ", "if ", "for every ", "there is ",
+    "it is not the case that ", " exactly when "]
+
+private def carriesConnective (value : String) : Bool :=
+  connectiveMarkers.any fun marker => (value.splitOn marker).length > 1
+
 private def renderAppliedDefinition (label meaning : String) : Option String := do
   let body ← (splitOnce meaning (label ++ " means ")).map (·.2)
+  if carriesConnective body then none else
   let (definition, arguments) ← splitOnce body " of "
   let arguments := arguments.splitOn ", "
   if arguments.length < 2 then none else
@@ -519,12 +688,14 @@ private def renderFile (roots : Array Name) (env : Environment) (root module : N
     let meaning ← renderDeclarationMarkdown roots env declarationContext info
     let heading := capitalize (contextualName env context info.name)
     sections := sections.push <| "## " ++ heading ++ "\n\n" ++ meaning
+  let body := String.intercalate "\n\n" sections.toList
+  let status := if body.contains "Description unavailable" then "Incomplete" else "Complete"
   let content := "# " ++ moduleTitle root module ++ "\n\n" ++
     "Formal source: [" ++ sourcePath ++ "](" ++ sourceLink ++ ") · " ++
     "[Vocabulary](" ++ vocabularyLink ++ ")\n\n" ++
-    "**Audit status:** Complete · " ++ toString declarations.size ++ " formal object" ++
+    "**Audit status:** " ++ status ++ " · " ++ toString declarations.size ++ " formal object" ++
     (if declarations.size == 1 then "" else "s") ++ "\n\n" ++
-    String.intercalate "\n\n" sections.toList ++ "\n"
+    body ++ "\n"
   return (outputPath, content)
 
 private def isProjectName (roots : Array Name) (name : Name) : Bool :=
