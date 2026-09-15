@@ -152,9 +152,9 @@ private def readableBinder (binder : Name) (noun : String) : Name :=
 /-- An argument that is itself a phrase needs grouping, or a reader cannot tell where one
 argument ends and the next begins. -/
 private def groupArgument (value : String) : String :=
-  if (value.splitOn ", ").length > 1 || (value.splitOn " of ").length > 1 then
-    "(" ++ value ++ ")"
-  else value
+  -- Only a comma inside an argument can be mistaken for the end of it. A chain such as
+  -- "session of entry" reads as one argument without help, so it is left alone.
+  if (value.splitOn ", ").length > 1 then "(" ++ value ++ ")" else value
 
 /-- The arguments a reader sees: a type or instance argument is machinery, not meaning. -/
 private def explicitArguments (function : Expr) (arguments : Array Expr) : MetaM (Array Expr) := do
@@ -274,6 +274,14 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         if parts.length == 2 then
           return some s!"{parts[0]!} is not one of {parts[1]!}"
         return some s!"it is not the case that {value}"
+      if (name == ``BEq.beq || name == `beq) && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} equals {right}"
+      if (name == ``bne || name == `bne) && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{left} does not equal {right}"
       if name == ``Ne && arguments.size == 3 then
         let some left ← renderExpression roots env context arguments[1]! | return none
         let some right ← renderExpression roots env context arguments[2]! | return none
