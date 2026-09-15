@@ -27,20 +27,23 @@ python3 "$skill_dir/scripts/materialize_libspec.py" --project "$skill_dir" --che
   cd "$skill_dir/formal"
   lake build
 )
-spec_report="$skill_dir/formal/.formal-spec/spec.md"
 (
   cd "$skill_dir/formal"
-  lake exe describe-spec > "$spec_report"
+  lake exe describe-spec
 )
-if [ ! -s "$spec_report" ]; then
-  echo "describe-spec produced an empty report: $spec_report" >&2
-  exit 1
-fi
-if [ -f "$skill_dir/formal/provenance.yaml" ]; then
-  python3 "$skill_dir/scripts/check_provenance.py" \
-    "$skill_dir/formal/provenance.yaml" --root "$skill_dir" \
-    --html "$skill_dir/formal/.formal-spec/provenance.html"
-fi
+for description in \
+  index.md \
+  vocabulary.md \
+  spec/Workflow.md \
+  model/SKILL.md \
+  proof/Workflow.md
+do
+  description_path="$skill_dir/formal/.formal-spec/$description"
+  if [ ! -s "$description_path" ]; then
+    echo "describe-spec did not produce $description_path" >&2
+    exit 1
+  fi
+done
 python3 -m unittest discover -s "$skill_dir/tests" -p 'test_*.py'
 
 echo "formal-spec skill check passed"

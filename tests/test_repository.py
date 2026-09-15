@@ -1,5 +1,6 @@
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ElementTree
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +10,7 @@ class RepositoryLayoutTests(unittest.TestCase):
     def test_delivery_is_a_root_skill_with_libspec(self) -> None:
         self.assertTrue((ROOT / "SKILL.md").is_file())
         self.assertTrue((ROOT / "LibSpec/LibSpec.lean").is_file())
-        self.assertTrue((ROOT / "scripts/check_provenance.py").is_file())
+        self.assertTrue((ROOT / "LibSpec/LibSpec/Testing.lean").is_file())
 
     def test_delivery_has_no_backend_or_adapter_tree(self) -> None:
         self.assertFalse((ROOT / "adapters").exists())
@@ -21,16 +22,28 @@ class RepositoryLayoutTests(unittest.TestCase):
             "formal/model.lean",
             "formal/spec.lean",
             "formal/proof.lean",
-            "formal/provenance.yaml",
             "formal/model/SKILL.lean",
-            "formal/model/scripts/check_provenance.lean",
             "formal/spec/Workflow.lean",
-            "formal/spec/Provenance.lean",
             "formal/proof/Workflow.lean",
-            "formal/proof/Provenance.lean",
         ):
             with self.subTest(path=path):
                 self.assertTrue((ROOT / path).is_file())
+
+    def test_brand_assets_are_valid_and_wired(self) -> None:
+        for relative in ("assets/logo.svg", "assets/cover.svg"):
+            with self.subTest(relative=relative):
+                root = ElementTree.parse(ROOT / relative).getroot()
+                self.assertTrue(root.tag.endswith("svg"))
+                self.assertIn("viewBox", root.attrib)
+        interface = (ROOT / "agents/openai.yaml").read_text(encoding="utf-8")
+        self.assertIn('icon_small: "./assets/logo.svg"', interface)
+        self.assertIn('brand_color: "#CA2121"', interface)
+
+    def test_presentation_demo_assets_are_valid(self) -> None:
+        gif = (ROOT / "assets/demo.gif").read_bytes()
+        video = (ROOT / "assets/demo.mp4").read_bytes()
+        self.assertIn(gif[:6], (b"GIF87a", b"GIF89a"))
+        self.assertEqual(video[4:8], b"ftyp")
 
 
 if __name__ == "__main__":

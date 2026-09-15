@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">formal-spec layered f equivalent to s mark</title>
+  <desc id="desc">White, black, and red cards stacked behind a white f equivalent to s.</desc>
+
+  <rect x="14" y="14" width="80" height="80" rx="14" fill="#FEFDFB" stroke="#1D0B06" stroke-width="2.5"/>
+  <rect x="24" y="24" width="80" height="80" rx="14" fill="#1D0B06"/>
+  <rect x="34" y="34" width="80" height="80" rx="14" fill="#CA2121"/>
+  <text x="74" y="74" fill="#FEFDFB"
+    font-family="ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace"
+    font-size="27" font-weight="500" text-anchor="middle"
+    dominant-baseline="central">f≡s</text>
+</svg>

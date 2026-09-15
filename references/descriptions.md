@@ -1,62 +1,137 @@
-# Readable specification descriptions
+# Readable formal descriptions
 
-The Lean declaration in `formal/spec/` is the normative account of behavior.
-Readable descriptions help people inspect that account; they do not replace
-the declaration, its proofs, or source correspondence.
+`formal-spec` turns the formal package into a reader-facing description tree.
+The Lean declarations remain the contract. The generated Markdown is a
+replaceable, human-readable view of that contract, not a second source of
+behavior.
 
-## Authoring contract
+## The generated tree
 
-Give each public specification declaration an adjacent Lean declaration
-docstring (`/-- ... -/`). Describe the intent, boundary, assumptions, and
-important accepted or rejected cases in prose. Keep the formal predicate or
-relation in Lean; do not duplicate its expression in Markdown, YAML, or a
-second definition.
+On demand, the description generator writes under `formal/.formal-spec/`:
 
-Register public specifications explicitly for description generation. A
-registry entry should identify the qualified Lean declaration and its source
-module (and, when the surrounding tooling uses anchors, its source anchor).
-Do not scan an entire environment for `def` declarations: that includes
-helpers and imported library declarations and makes the public specification
-surface implicit.
-
-## Generation
-
-The optional `describe-spec` Lean executable reads that registry and emits a
-Markdown report. Run it only when a readable view is needed:
-
-```sh
-(cd formal && lake exe describe-spec) > formal/.formal-spec/spec.md
+```text
+formal/.formal-spec/
+├── index.md
+├── vocabulary.md
+├── spec/
+│   └── Workflow.md
+├── model/
+│   └── SKILL.md
+└── proof/
+    └── Workflow.md
 ```
 
-The report is generated output and belongs under `formal/.formal-spec/`; it is
-safe to delete and regenerate. It should include, for every registered
-declaration:
+The actual tree mirrors the project's public formal source tree. For each
+public project Lean file, the generator creates one Markdown file at the same
+relative path with a Markdown extension. Generated support files and imported
+library sources are not treated as project specifications. The index links to
+every per-file document and to the vocabulary.
 
-- the qualified declaration name and source location;
-- the declaration docstring; and
-- an exact rendering of the formal statement.
+There is no monolithic `spec.md` report. A reader should be able to open the
+document for one source file and understand that file on its own.
 
-The exact rendering is useful for checking what Lean actually elaborated. It
-is not a promise that arbitrary Lean expressions can be translated faithfully
-to natural language. Generation should fail for an unknown declaration,
-duplicate registry entry, or missing/non-empty docstring rather than silently
-producing an incomplete report.
+## What each per-file document contains
 
-The report may carry a source fingerprint or generator version so stale output
-is visible, but it should not be used as a semantic cache. If a declaration
-changes while its docstring does not, a human review is still required.
+Each document is the informal, reader-facing specification for one source
+file. It explains, in ordinary language:
 
-## Boundaries and limits
+- what the file introduces;
+- the meaning of every term needed by its declarations;
+- accepted, rejected, and boundary cases;
+- conditions, alternatives, and state transitions; and
+- the properties established by the file's checked proofs.
 
-Descriptions are documentation, not evidence that a model refines a spec. The
-proof modules retain that guarantee, and the provenance checker retains only
-the artifact-identity and wiring checks it documents. Keep description
-generation separate from the dependency-free provenance validator: the latter
-must not invoke Lean, a parser, a language server, or an external service.
+The generator derives this prose from elaborated Lean objects and recursively
+follows their declaration dependencies. It must not put Lean source, formal
+types, proof terms, formal syntax, or code blocks in these documents. A reader
+does not need to read Lean to understand the generated specification. The
+formal source is available only as optional provenance.
 
-Do not build a general Lean-to-English translator, infer intent from models or
-proofs, or use LLM-generated prose as a checked artifact. Such approaches can
-omit quantifier scope, conjunction clauses, assumptions, or boundary cases.
-When repeated projects need machine-readable fields beyond prose, add a small
-typed metadata shape to the explicit registry and keep the Lean declaration
-as the only normative statement.
+## Render for review, not as serialized prose
+
+The generated Markdown is an audit interface. Preserve the logical structure
+instead of flattening an object into one sentence:
+
+- render implications as separate conditions and guarantees;
+- render conjunctions as separate bullets or rows;
+- render records and concrete states as field tables;
+- render each transition with its own preconditions and effects table;
+- render negation as an excluded case;
+- identify every theorem as checked and separate its scope, assumptions, and
+  result; and
+- show file-level completeness and object counts in the index.
+
+Keep reusable term definitions in `vocabulary.md`. Do not repeat complete
+theorem claims there. Prefer short sections that answer what a reviewer needs
+to decide: what applies, what must hold, what changes, what is impossible, and
+which claim has been checked.
+
+Every per-file document starts with a visible relative link to its matching
+Lean source file, for example:
+
+```text
+Formal source: [formal/spec/Workflow.lean](../../spec/Workflow.lean)
+```
+
+The generator computes the relative link from the output path, so it remains
+correct for nested files. The link identifies where the description came from;
+it does not replace the plain-language explanation and does not imply that a
+source path is proof of implementation behavior.
+
+## The separate vocabulary
+
+`vocabulary.md` is the generated cross-file glossary. It contains every term
+needed by the public descriptions, its natural-language meaning, the shortest
+contextual display name, the qualifiers used when names collide, and a link
+to the source file that defines it. Meanings are generated by following
+definitions and their dependencies, not by asking an agent to write a
+paragraph.
+
+The vocabulary stays in this separate file instead of being repeated as a
+glossary inside every specification. Per-file prose still uses ordinary,
+domain-readable names and complete sentences. `vocabulary.md` is the
+cross-file reference and the place to inspect naming collisions; it is not a
+hand-maintained source of truth.
+
+## Contextual names preserve identity
+
+For each referenced declaration, the generator removes namespace and type
+information already established by the current section, then chooses the
+shortest label that is still unique. If two declarations would be confused,
+it adds the smallest required qualifier. If the context still cannot
+disambiguate them, the document records an ambiguity instead of choosing a
+meaning. The underlying declaration identity remains distinct throughout the
+graph, even when two display names are short or similar.
+
+## The one agent-facing extension point
+
+Most terms need no manual input. If a generated name is not a useful domain
+term, add only a short vocabulary override to the declaration:
+
+```lean
+@[describeAs "inventory available for reservation"]
+def availableStock : Nat := ...
+```
+
+The override supplies a label, not a specification. It cannot alter the
+object, its dependencies, conditions, or proof. Do not write a replacement
+paragraph, duplicate the formal rule in Markdown, or maintain a declaration
+registry. Unsupported logical constructs require an improvement to the
+renderer, not a prose workaround exposed to every project.
+
+## Fail visibly
+
+The generator must never guess or silently omit a declaration. Every public
+source file still receives a Markdown document. If a construct cannot be
+rendered precisely, a term cannot be named uniquely, or a vocabulary override
+is required, the affected document contains a clear `Description unavailable`
+notice and explains what kind of extension is needed. `index.md` marks the
+file as incomplete, `vocabulary.md` records unresolved terms, and checking
+mode exits unsuccessfully so CI cannot present an incomplete description as
+complete. The generated documents still contain no Lean types or source
+blocks as a fallback.
+
+Regenerate the whole tree whenever the formal package changes. Do not edit
+`formal/.formal-spec/` by hand. Change the Lean declaration or its optional
+vocabulary override, regenerate, and review the per-file document, index,
+vocabulary, and source links together.

@@ -1,6 +1,7 @@
 # Project layout
 
-Use this project structure. Create only the files required by the current proof.
+Keep the formal work beside the source it explains. Create only the files
+needed for the current behavior claim.
 
 ```text
 project/
@@ -8,49 +9,65 @@ project/
 └── formal/
     ├── lakefile.toml
     ├── lean-toolchain
-    ├── provenance.yaml
     ├── model.lean             # imports the current model modules
-    ├── spec.lean              # imports the current spec modules
+    ├── spec.lean              # imports the current specification modules
     ├── proof.lean             # imports the current proof modules
-    ├── model/                 # demand-driven models, mirroring source paths
+    ├── model/                 # small, demand-driven behavior models
     │   └── src/auth/token.lean
-    ├── spec/                  # normative intent grouped by feature or domain
+    ├── spec/                  # normative intent, grouped by feature
     │   └── TokenPolicy.lean
-    ├── proof/                 # connections from models to specs
+    ├── proof/                 # theorems connecting models to specifications
     │   └── TokenPolicy.lean
-    └── .formal-spec/          # generated views, build state, delivered library
+    └── .formal-spec/          # replaceable generated support
         ├── LibSpec/
-        └── provenance.html
+        ├── index.md
+        ├── vocabulary.md
+        ├── spec/              # readable Markdown mirroring formal/spec/
+        ├── model/             # readable Markdown mirroring formal/model/
+        ├── proof/             # readable Markdown mirroring formal/proof/
+        └── test-vectors/
 ```
 
-## Directory contract
+## One job per directory
 
-`formal/model/` mirrors source-relative directories. Replace the source
-extension with `.lean`. For example, `src/auth/token.ts` maps to
-`formal/model/src/auth/token.lean`. If two source files differ only by extension,
-append a short extension suffix such as `token_ts.lean`. Encode path components
-only when Lean's module rules require it. Record the exact physical mapping in
-provenance, so the mapping remains unambiguous.
+`formal/spec/` contains the behavior the product is meant to guarantee. Keep
+these declarations independent of the current implementation. Organize them
+around concepts people recognize, such as `TokenPolicy` or `Inventory`, rather
+than copying the source tree.
 
-Put user intent in `formal/spec/`. Organize it by the concepts users recognize,
-not by source files. A spec can exist before an implementation.
+`formal/model/` contains only the source behavior a proof or an executable
+oracle needs. A model can be a function, relation, state machine, or other
+small Lean definition. It is not a translation of the whole project and it is
+not a language backend. When mirroring a source path makes review easier,
+`src/auth/token.ts` can have a model at
+`formal/model/src/auth/token.lean`. A source file does not need a model merely
+because it exists.
 
-Put theorems that connect a model to a spec in `formal/proof/`. Small helper
-lemmas can remain beside the definition they explain. Do not copy source
-behavior into the spec or restate the spec in the model.
+`formal/proof/` contains the theorems that connect the model to the
+specification. Keep the proof visibly dependent on both sides. Invariant
+proofs also explain why the guarantee survives every modeled transition, not
+just the examples chosen for a test run.
 
-`formal/.formal-spec/` contains replaceable support: the materialized `LibSpec`,
-Lake output, and the generated provenance view. Do not put normative definitions
-or proofs there.
+The three root files, `model.lean`, `spec.lean`, and `proof.lean`, import the
+modules that currently exist below their matching directories. This gives Lake
+stable build targets without requiring empty placeholder modules.
 
-Do not add permanent language adapters, whole-project translators, compiler
-snapshots, generated semantic trees, or a general abstraction layer. A small
-one-off script is acceptable when it removes mechanical work for the current
-proof. Keep it only if regeneration or review will need it again.
+`formal/.formal-spec/` is disposable support. The materialized `LibSpec`, a
+generated readable specification, and generated model-derived test vectors may
+live there. Do not put normative declarations or hand-written proofs in this
+directory. Delete and regenerate its contents when the formal build requires
+it.
 
-## Lake dependency
+## Lake setup
 
-Materialize `LibSpec` from the installed skill and reference it locally:
+Materialize the delivered library into a project's local formal build area:
+
+```sh
+python3 <skill-dir>/scripts/materialize_libspec.py --project <project-root>
+```
+
+Use a local Lake dependency and keep the Lean release aligned with the
+materialized library:
 
 ```toml
 name = "project-formal"
@@ -66,9 +83,21 @@ name = "ProjectFormal"
 roots = ["model", "spec", "proof"]
 ```
 
-The three small root modules import the artifacts that currently exist below
-their matching directories. This keeps the physical separation while giving
-Lake one source root, so proofs can import both model and spec modules.
+Pin `lean-toolchain` to the release used by `LibSpec`. Build from the formal
+directory:
 
-Pin the project's `lean-toolchain` to the same Lean release as the delivered
-library. Run the materializer with `--check` in repeatable validation workflows.
+```sh
+(cd formal && lake build)
+```
+
+## Keep generated work on demand
+
+Readable reports and finite test vectors are views of the current declarations
+and model. Generate them when a review or conformance run needs them. Do not
+turn generated vectors into a permanent source tree, a compiler snapshot, or a
+general source-language adapter. If repeated regeneration is useful, keep the
+small generator and its proof obligations close to the feature it serves.
+
+The Lean theorem still states the guarantee. A test adapter can execute the
+source implementation against generated cases, but that adapter is a reviewed
+boundary and is not supplied by the directory layout itself.

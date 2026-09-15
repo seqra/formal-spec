@@ -1,19 +1,27 @@
 import LibSpec
-import spec.Provenance
+import model.SKILL
+import proof.Workflow
 import spec.Workflow
 
 namespace FormalSpec
 
-/-!
-The public description surface is intentionally explicit.  Register only the
-normative declarations whose docstrings describe user-facing guarantees; do
-not scan imported environments or source models for definitions.
--/
-def specDescriptions : List String :=
-  [ describeSpec% FormalSpec.Spec.proofFirstInvariant,
-    describeSpec% FormalSpec.Provenance.Valid ]
+def formalDescriptions : List (String × String) :=
+  describeFiles% FormalSpec.Spec, FormalSpec.Model, FormalSpec.Proof
 
 end FormalSpec
 
 def main : IO Unit := do
-  IO.println (String.intercalate "\n" FormalSpec.specDescriptions)
+  let outputRoot : System.FilePath := ".formal-spec"
+  for generated in ["index.md", "vocabulary.md", "spec.md", "spec", "model", "proof"] do
+    let path := outputRoot / generated
+    if ← path.pathExists then
+      if ← path.isDir then IO.FS.removeDirAll path else IO.FS.removeFile path
+  let mut incomplete := false
+  for (relative, content) in FormalSpec.formalDescriptions do
+    let path := outputRoot / relative
+    if let some parent := path.parent then IO.FS.createDirAll parent
+    IO.FS.writeFile path content
+    if content.contains "Description unavailable" then incomplete := true
+  if incomplete then
+    throw <| IO.userError "generated descriptions are incomplete"
+  IO.println s!"Generated {FormalSpec.formalDescriptions.length} description files in {outputRoot}."

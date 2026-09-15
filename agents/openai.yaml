@@ -1,4 +1,7 @@
 interface:
   display_name: "Formal Spec"
-  short_description: "Drive implementation with Lean proofs"
-  default_prompt: "Use $formal-spec to design this change proof-first and retain its guarantees."
+  short_description: "Make important behavior explicit and provable"
+  icon_small: "./assets/logo.svg"
+  icon_large: "./assets/logo.svg"
+  brand_color: "#CA2121"
+  default_prompt: "Use $formal-spec to control this change from formal intent through implementation tests."
