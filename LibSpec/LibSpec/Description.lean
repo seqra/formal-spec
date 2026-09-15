@@ -149,6 +149,13 @@ private def readableBinder (binder : Name) (noun : String) : Name :=
     else noun
   Name.mkSimple (if trimmed.isEmpty then "value" else trimmed.replace " " "_")
 
+/-- An argument that is itself a phrase needs grouping, or a reader cannot tell where one
+argument ends and the next begins. -/
+private def groupArgument (value : String) : String :=
+  if (value.splitOn ", ").length > 1 || (value.splitOn " of ").length > 1 then
+    "(" ++ value ++ ")"
+  else value
+
 /-- The arguments a reader sees: a type or instance argument is machinery, not meaning. -/
 private def explicitArguments (function : Expr) (arguments : Array Expr) : MetaM (Array Expr) := do
   let info ← getFunInfoNArgs function arguments.size
@@ -190,6 +197,19 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
           return some s!"if {renderedDomain}, then {renderedBody}"
         let binderLabel := humanize binder.toString
         let domainLabel ← renderTypeNoun env context domain
+        match body.instantiate1 localValue with
+        | .forallE _ membership rest _ =>
+            if !rest.hasLooseBVar 0 then
+              let (membershipName, membershipArgs) := membership.getAppFnArgs
+              if membershipName == ``Membership.mem && membershipArgs.size >= 2 then
+                if membershipArgs[membershipArgs.size - 1]! == localValue then
+                  let some collection ←
+                    renderExpression roots env context membershipArgs[membershipArgs.size - 2]!
+                    | return some s!"for every {binderLabel}, {domainLabel}, {renderedBody}"
+                  let some claim ← renderExpression roots env context rest
+                    | return some s!"for every {binderLabel}, {domainLabel}, {renderedBody}"
+                  return some s!"every {binderLabel} in {collection} is such that {claim}"
+        | _ => pure ()
         return some s!"for every {binderLabel}, {domainLabel}, {renderedBody}"
   | .app .. =>
       let (name, arguments) := expression.getAppFnArgs
@@ -201,18 +221,34 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
             let discriminatorType ← whnf (← inferType discriminator)
             let (inductiveName, _) := discriminatorType.getAppFnArgs
             if let some (.inductInfo inductiveInfo) := env.find? inductiveName then
-              if inductiveInfo.ctors.length == matcherInfo.numAlts then
-                let mut cases := []
-                let alternativePosition := matcherInfo.getFirstAltPos
-                for index in List.range matcherInfo.numAlts do
-                  if _alt : alternativePosition + index < arguments.size then
-                    let branch := arguments[alternativePosition + index]
-                    let some renderedBranch ← renderExpression roots env context branch | return none
+              -- A branch may be labelled by a constructor only when it actually binds that
+              -- constructor's fields. A pattern such as `[first, second]` compiles to as many
+              -- alternatives as `List` has constructors while matching neither of them, and
+              -- labelling it by position would attribute a branch to the wrong case.
+              let labelled := inductiveInfo.ctors.length == matcherInfo.numAlts &&
+                (List.range matcherInfo.numAlts).all fun index =>
+                  match env.find? (inductiveInfo.ctors[index]!) with
+                  | some (.ctorInfo constructor) =>
+                      -- an alternative binding nothing still takes one parameter
+                      matcherInfo.altNumParams[index]? == some (max 1 constructor.numFields)
+                  | _ => false
+              let mut cases := []
+              let alternativePosition := matcherInfo.getFirstAltPos
+              for index in List.range matcherInfo.numAlts do
+                if _alt : alternativePosition + index < arguments.size then
+                  let branch := arguments[alternativePosition + index]
+                  let some renderedBranch ← renderExpression roots env context branch | return none
+                  if labelled then
                     let constructor := inductiveInfo.ctors[index]!
                     let constructorLabel := contextualName env inductiveInfo.ctors.toArray constructor
                     cases := cases ++ [s!"when {constructorLabel}, {renderedBranch}"]
-                  else return none
-                return some <| String.intercalate "; " cases
+                  else
+                    cases := cases ++ [renderedBranch]
+                else return none
+              if labelled then return some <| String.intercalate "; " cases
+              let some subject ← renderExpression roots env context discriminator | return none
+              return some <|
+                s!"depending on {groupArgument subject}, one of: " ++ String.intercalate "; " cases
       if name == ``Eq && arguments.size == 3 then
         let some left ← renderExpression roots env context arguments[1]! | return none
         let some right ← renderExpression roots env context arguments[2]! | return none
@@ -234,6 +270,9 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         return some s!"{left} exactly when {right}"
       if name == ``Not && arguments.size == 1 then
         let some value ← renderExpression roots env context arguments[0]! | return none
+        let parts := value.splitOn " is one of "
+        if parts.length == 2 then
+          return some s!"{parts[0]!} is not one of {parts[1]!}"
         return some s!"it is not the case that {value}"
       if name == ``Ne && arguments.size == 3 then
         let some left ← renderExpression roots env context arguments[1]! | return none
@@ -243,7 +282,27 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
       if name == ``Option.some && arguments.size == 2 then
         return ← renderExpression roots env context arguments[1]!
       if name == ``Option.none then return some "no value"
+      if (name == ``Option.orElse || name == ``Option.getD) && arguments.size >= 3 then
+        let some preferred ← renderExpression roots env context arguments[arguments.size - 2]!
+          | return none
+        let some fallback ← renderExpression roots env context arguments[arguments.size - 1]!
+          | return none
+        return some s!"{groupArgument preferred}, or failing that {groupArgument fallback}"
       if name == ``List.nil then return some "nothing"
+      if name == ``String.ofList && arguments.size >= 1 then
+        let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"the text of {groupArgument value}"
+      if name == ``Char.ofNat && arguments.size == 1 then
+        let some code ← getNatValue? arguments[0]! | return none
+        if code == 10 then return some "a line break"
+        if code == 9 then return some "a tab"
+        if code == 13 then return some "a carriage return"
+        if code == 32 then return some "a space"
+        return some s!"the character “{Char.ofNat code}”"
+      if name == `HAppend.hAppend && arguments.size >= 2 then
+        let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
+        let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
+        return some s!"{groupArgument left} followed by {groupArgument right}"
       if (name == ``ite || name == ``dite) && arguments.size >= 5 then
         let some condition ← renderExpression roots env context arguments[1]! | return none
         let some yes ← renderExpression roots env context arguments[arguments.size - 2]! | return none
@@ -309,35 +368,35 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         return some s!"{left} less {right}"
       if (name == ``List.length || name == ``String.length) && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the length of {value}"
+        return some s!"the length of {groupArgument value}"
       if name == ``List.Nodup && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
         return some s!"{value} holds nothing twice"
       if name == ``List.Sublist && arguments.size >= 2 then
         let some left ← renderExpression roots env context arguments[arguments.size - 2]! | return none
         let some right ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"{left} is {right} with entries left out"
+        return some s!"{left} is a subsequence of {right}"
       if name == ``String.toList && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the characters of {value}"
+        return some s!"the characters of {groupArgument value}"
       if name == ``List.map && arguments.size >= 2 then
         let some transform ← renderExpression roots env context arguments[arguments.size - 2]!
           | return none
         let some collection ← renderExpression roots env context arguments[arguments.size - 1]!
           | return none
-        return some s!"the {transform} of each of {collection}"
+        return some s!"the {transform} of each of {groupArgument collection}"
       if name == ``List.sum && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the total of {value}"
+        return some s!"the total of {groupArgument value}"
       if name == ``Prod.fst && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the first part of {value}"
+        return some s!"the first part of {groupArgument value}"
       if name == ``Prod.snd && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the second part of {value}"
+        return some s!"the second part of {groupArgument value}"
       if name == ``List.head? && arguments.size >= 1 then
         let some value ← renderExpression roots env context arguments[arguments.size - 1]! | return none
-        return some s!"the first entry of {value}"
+        return some s!"the first entry of {groupArgument value}"
       if isSemanticName roots name && !isGeneratedName name then
         if let some (.ctorInfo constructor) := env.find? name then
           if let some structureInfo := getStructureInfo? env constructor.induct then
@@ -354,20 +413,23 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         let renderedArguments ← shown.filterMapM (renderExpression roots env context)
         let label := contextualName env context name
         if renderedArguments.isEmpty then return some label
-        return some <| label ++ " of " ++ String.intercalate ", " renderedArguments.toList
+        return some <| label ++ " of " ++
+          String.intercalate ", " (renderedArguments.toList.map groupArgument)
       match expression.getAppFn with
       | .fvar id =>
           let functionLabel := humanize (← id.getUserName).toString
           let renderedArguments ← expression.getAppArgs.filterMapM (renderExpression roots env context)
           if renderedArguments.isEmpty then return some functionLabel
-          return some <| functionLabel ++ " of " ++ String.intercalate ", " renderedArguments.toList
+          return some <| functionLabel ++ " of " ++
+            String.intercalate ", " (renderedArguments.toList.map groupArgument)
       | _ => pure ()
       if !isGeneratedName name && env.contains name then
         let shown ← explicitArguments expression.getAppFn arguments
         let renderedArguments ← shown.filterMapM (renderExpression roots env context)
         let label := libraryLabel name
         if renderedArguments.isEmpty then return some label
-        return some <| label ++ " of " ++ String.intercalate ", " renderedArguments.toList
+        return some <| label ++ " of " ++
+          String.intercalate ", " (renderedArguments.toList.map groupArgument)
       return none
   | .lam binder domain body binderInfo => do
       let binder := readableBinder binder (← renderTypeNoun env context domain)
@@ -378,6 +440,17 @@ private partial def renderExpression (roots : Array Name) (env : Environment) (c
         renderExpression roots env context (body.instantiate1 localValue)
   | .mdata _ body | .proj _ _ body => renderExpression roots env context body
   | _ => return none
+
+/-- Whether the definition itself is a case analysis, rather than merely containing one somewhere
+inside. A record whose fields happen to match on something is still a record. -/
+private partial def bodyIsMatch (env : Environment) (value : Expr) : Bool :=
+  match value with
+  | .lam _ _ body _ => bodyIsMatch env body
+  | .mdata _ body => bodyIsMatch env body
+  | _ =>
+      match value.getAppFn with
+      | .const name _ => (getMatcherInfoCore? env name).isSome
+      | _ => false
 
 /-- Whether a definition's body is compiler-built recursion machinery rather than what the
 author wrote. Such a body describes how the recursion is justified, not what the function means. -/
@@ -432,12 +505,20 @@ private def declarationMeaning (roots : Array Name) (env : Environment) (context
       else
         match info.value? (allowOpaque := true) with
         | some value =>
-            if usesRecursionMachinery value then
+            if (← whnf (← inferType value)).isSort then
+              let noun ← renderTypeNoun env context value
+              return s!"{label} means {noun}."
+            if usesRecursionMachinery value || bodyIsMatch env value then
               match ← equationMeanings roots env context info.name with
               | some cases =>
                   return s!"{label} is given case by case: " ++
                     String.intercalate "; " cases ++ "."
               | none =>
+                  -- Recursion machinery describes how a recursion is justified, never what the
+                  -- definition means, so it is not offered to a reader in place of the cases.
+                  if !usesRecursionMachinery value then
+                    if let some meaning ← renderExpression roots env context value then
+                      return s!"{label} means {meaning}."
                   let noun ← forallTelescopeReducing info.type fun _ result =>
                     renderTypeNoun env context result
                   return s!"{label} defines {noun}, case by case over its argument."
@@ -545,7 +626,7 @@ private def carriesConnective (value : String) : Bool :=
 
 private def renderAppliedDefinition (label meaning : String) : Option String := do
   let body ← (splitOnce meaning (label ++ " means ")).map (·.2)
-  if carriesConnective body then none else
+  if carriesConnective body || (body.splitOn "(").length > 1 then none else
   let (definition, arguments) ← splitOnce body " of "
   let arguments := arguments.splitOn ", "
   if arguments.length < 2 then none else
@@ -623,6 +704,42 @@ private def renderTransitionSystem (label meaning : String) : Option String := d
     "**Initial condition**\n\n- " ++ capitalize (readableMeaning initial) ++
     ".\n\n" ++ String.intercalate "\n\n" renderedCases
 
+/-- Splits a theorem's statement into what it ranges over, what it assumes, and what it
+guarantees, by walking the statement itself. Recovering these by splitting rendered prose loses
+the conclusion of a theorem that assumes nothing, because there is no phrase to split on. -/
+private partial def theoremParts (roots : Array Name) (env : Environment) (context : Array Name)
+    (type : Expr) (scope hypotheses : List String) :
+    TermElabM (List String × List String × Option String) := do
+  match type with
+  | .forallE binder domain body binderInfo =>
+      if binderInfo == .instImplicit then
+        withLocalDecl binder binderInfo domain fun value =>
+          theoremParts roots env context (body.instantiate1 value) scope hypotheses
+      else if !body.hasLooseBVar 0 && (← isProp domain) then
+        let rendered ← renderExpression roots env context domain
+        let some assumption := rendered | return (scope, hypotheses, none)
+        withLocalDecl binder binderInfo domain fun value =>
+          theoremParts roots env context (body.instantiate1 value) scope
+            (hypotheses ++ [assumption])
+      else
+        let noun ← renderTypeNoun env context domain
+        let binder := readableBinder binder noun
+        let entry := s!"{humanize binder.toString} — {noun}"
+        withLocalDecl binder binderInfo domain fun value =>
+          theoremParts roots env context (body.instantiate1 value) (scope ++ [entry]) hypotheses
+  | _ =>
+      let conclusion ← renderExpression roots env context type
+      return (scope, hypotheses, conclusion)
+
+private def renderTheoremParts (scope hypotheses : List String) (conclusion : String) : String :=
+  let scopeSection :=
+    if scope.isEmpty then "" else "**Scope**\n\n" ++ bullets scope ++ "\n\n"
+  if hypotheses.isEmpty then
+    scopeSection ++ "**Established**\n\n" ++ bullets (conjuncts conclusion)
+  else
+    scopeSection ++ "**Given**\n\n" ++ bullets hypotheses ++
+      "\n\n**Guarantee**\n\n" ++ bullets (conjuncts conclusion)
+
 private def renderDeclarationMarkdown (roots : Array Name) (env : Environment)
     (context : Array Name) (info : ConstantInfo) : TermElabM String := do
   let label := contextualName env context info.name
@@ -650,8 +767,13 @@ private def renderDeclarationMarkdown (roots : Array Name) (env : Environment)
           return "The possible cases are:\n\n" ++ bullets cases
   | .thmInfo _ =>
       let claim := (splitOnce meaning (label ++ " proves that ")).map (·.2) |>.getD meaning
-      let rendered := (renderStateClaim claim).getD (renderClaim claim)
-      return "**Proof status:** Checked theorem\n\n" ++ rendered
+      if let some stateClaim := renderStateClaim claim then
+        return "**Proof status:** Checked theorem\n\n" ++ stateClaim
+      match ← theoremParts roots env context info.type [] [] with
+      | (scope, hypotheses, some conclusion) =>
+          return "**Proof status:** Checked theorem\n\n" ++
+            renderTheoremParts scope hypotheses conclusion
+      | _ => return "**Proof status:** Checked theorem\n\n" ++ renderClaim claim
   | .defnInfo _ | .opaqueInfo _ =>
       if let some transition := renderTransitionSystem label meaning then return transition
       if let some rule := renderRule label meaning then return rule
