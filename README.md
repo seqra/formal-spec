@@ -1,7 +1,7 @@
 # formal-spec
 
 <p align="center">
-  <img src="assets/cover.svg" alt="formal-spec — proof before the patch" width="960">
+  <img src="skill/assets/cover.svg" alt="formal-spec — proof before the patch" width="960">
 </p>
 
 ## Give important behavior a contract — not just a prompt
@@ -17,6 +17,8 @@ change, did the implementation regress, or did an assumption surface?
 
 ## Install
 
+Install the `formal-spec` skill from its public GitHub repository:
+
 ```sh
 npx skills add seqra/formal-spec
 ```
@@ -25,10 +27,10 @@ After installation, compatible coding agents can apply the skill in context
 when a task contains a meaningful behavior claim. To steer a task, say:
 “Work proof-first on this change.” No special syntax is required.
 
-## See proof-first behavior in action — [inventory storyboard](demo/README.md)
+## See proof-first behavior in action — [inventory storyboard](skill/demo/README.md)
 
 <p align="center">
-  <a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Animation showing an inventory invariant, a proof-derived counterexample, and a corrected guard" width="960"></a>
+  <a href="skill/assets/demo.mp4"><img src="skill/assets/demo.gif" alt="Animation showing an inventory invariant, a proof-derived counterexample, and a corrected guard" width="960"></a>
 </p>
 
 The animation follows one product rule: `reserved ≤ stock`.
@@ -81,10 +83,10 @@ library for relation and transition proofs, ships with the skill.
 
 ## Learn more
 
-- [Skill instructions](SKILL.md)
-- [Controlled development loop](references/workflow.md)
-- [Model-derived testing](references/testing.md)
-- [Readable specifications](references/descriptions.md)
-- [LibSpec](LibSpec/)
+- [Skill instructions](skill/SKILL.md)
+- [Controlled development loop](skill/references/workflow.md)
+- [Model-derived testing](skill/references/testing.md)
+- [Readable specifications](skill/references/descriptions.md)
+- [LibSpec](skill/LibSpec/)
 
 Apache-2.0. See [LICENSE](LICENSE).

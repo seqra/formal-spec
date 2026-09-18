@@ -8,7 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MATERIALIZER = ROOT / "scripts" / "materialize_libspec.py"
+MATERIALIZER = ROOT / "skill/scripts/materialize_libspec.py"
 
 
 class MaterializeTests(unittest.TestCase):

@@ -8,7 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MATERIALIZER = ROOT / "scripts" / "materialize_libspec.py"
+MATERIALIZER = ROOT / "skill/scripts/materialize_libspec.py"
 
 
 class DocumentedProjectLayoutTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class DocumentedProjectLayoutTests(unittest.TestCase):
             )
             formal = project / "formal"
             files = {
-                "lean-toolchain": (ROOT / "LibSpec/lean-toolchain").read_text(),
+                "lean-toolchain": (ROOT / "skill/LibSpec/lean-toolchain").read_text(),
                 "lakefile.toml": """name = "project-formal"
 version = "0.1.0"
 defaultTargets = ["ProjectFormal"]

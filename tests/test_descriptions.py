@@ -19,7 +19,7 @@ class DescriptionWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         materialized = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "materialize_libspec.py"),
+            [sys.executable, str(ROOT / "skill/scripts/materialize_libspec.py"),
              "--project", str(ROOT), "--force"],
             capture_output=True,
             text=True,
@@ -37,8 +37,8 @@ class DescriptionWorkflowTests(unittest.TestCase):
         return (OUTPUT / relative).read_text(encoding="utf-8")
 
     def test_documentation_defines_per_file_description_contract(self) -> None:
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        reference = (ROOT / "references/descriptions.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skill/SKILL.md").read_text(encoding="utf-8")
+        reference = (ROOT / "skill/references/descriptions.md").read_text(encoding="utf-8")
         for text in (skill, reference):
             self.assertIn("per-file", text)
             self.assertIn("vocabulary.md", text)
@@ -118,13 +118,13 @@ class DescriptionWorkflowTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_skill_check_invokes_tree_generator(self) -> None:
-        script = (ROOT / "scripts" / "check_skill.sh").read_text(encoding="utf-8")
+        script = (ROOT / "skill/scripts/check_skill.sh").read_text(encoding="utf-8")
         self.assertIn("lake exe describe-spec", script)
         self.assertIn("vocabulary.md", script)
         self.assertIn("spec/Workflow.md", script)
         self.assertNotIn("> \"$spec_report\"", script)
         result = subprocess.run(
-            ["sh", "-n", str(ROOT / "scripts" / "check_skill.sh")],
+            ["sh", "-n", str(ROOT / "skill/scripts/check_skill.sh")],
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
