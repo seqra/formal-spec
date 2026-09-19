@@ -1,7 +1,7 @@
 # formal-spec
 
 <p align="center">
-  <img src="skill/assets/cover.svg" alt="formal-spec — proof before the patch" width="960">
+  <img src="assets/cover.svg" alt="formal-spec — proof before the patch" width="960">
 </p>
 
 ## Give important behavior a contract — not just a prompt
@@ -27,10 +27,10 @@ After installation, compatible coding agents can apply the skill in context
 when a task contains a meaningful behavior claim. To steer a task, say:
 “Work proof-first on this change.” No special syntax is required.
 
-## See proof-first behavior in action — [inventory storyboard](skill/demo/README.md)
+## See proof-first behavior in action — [inventory storyboard](demo/README.md)
 
 <p align="center">
-  <a href="skill/assets/demo.mp4"><img src="skill/assets/demo.gif" alt="Animation showing an inventory invariant, a proof-derived counterexample, and a corrected guard" width="960"></a>
+  <a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Animation showing an inventory invariant, a proof-derived counterexample, and a corrected guard" width="960"></a>
 </p>
 
 The animation follows one product rule: `reserved ≤ stock`.
