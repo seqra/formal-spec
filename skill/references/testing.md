@@ -3,8 +3,8 @@
 Use model-derived tests when a specification has concrete observations that
 can be executed. The model supplies an oracle, a declared domain supplies the
 denominator, and a small adapter runs the real implementation. This is useful
-evidence, but it does not turn a model into a source-language semantics or a
-test generator for an entire project.
+finite evidence about the executable. When a checked translation theorem also
+exists, report its source-semantic guarantee separately from runtime results.
 
 ## Start with the observed behavior
 

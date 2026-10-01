@@ -12,7 +12,7 @@ fi
 
 if command -v rg >/dev/null 2>&1; then
   if rg -n '^[[:space:]]*(axiom|unsafe|sorry|admit)([[:space:]]|$)' \
-      "$skill_dir/LibSpec" "$project_dir/formal" -g '*.lean'; then
+      "$skill_dir/LibSpec" "$skill_dir/examples" "$project_dir/formal" -g '*.lean'; then
     echo "unchecked Lean declaration or placeholder found" >&2
     exit 1
   fi
@@ -21,6 +21,7 @@ fi
 (
   cd "$skill_dir/LibSpec"
   lake build
+  lake env lean ../examples/Max.lean
 )
 python3 "$skill_dir/scripts/materialize_libspec.py" --project "$project_dir" --force
 python3 "$skill_dir/scripts/materialize_libspec.py" --project "$project_dir" --check

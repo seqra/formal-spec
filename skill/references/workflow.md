@@ -4,12 +4,16 @@ Use this proof-first loop when a behavior or invariant matters enough to retain
 as a machine-checked contract:
 
 ```text
-intent → spec → model → proof → tests → implementation → feedback
+intent → independent spec + source model → obligations → proofs
+                                      ↘ checked translation → source theorem
+                                      ↘ conformance tests → runtime evidence
 ```
 
-The purpose is not to model a whole codebase. The purpose is to control one
-consequential claim and carry it through to the real implementation with
-model-derived conformance tests.
+The purpose is to control one consequential claim. When translation soundness
+is checked, carry the model proof through to source semantics. Otherwise,
+carry it to the implementation with model-derived conformance tests and state
+the narrower evidence. Read [verification-architecture.md](verification-architecture.md)
+for the source-level path and its checked example.
 
 ## 1. Bound the claim
 
@@ -42,9 +46,10 @@ explicitly and record which prior guarantee is extended, narrowed, or removed.
 
 Add a model only when a proof must reason about implementation-relevant
 behavior or when a model gives a new implementation a precise design target.
-Model the smallest useful boundary and observations. Do not translate source
-syntax, mirror unrelated declarations, or create reusable translation
-machinery in anticipation of future work.
+Model the smallest useful boundary and observations. A source-level theorem
+requires formal source semantics, a translation, and a checked relation to the
+shallow model. Limit any translator or verification IR to the selected typed
+subset and behavior claim; do not mirror unrelated declarations.
 
 For stateful behavior, model only the state, inputs, transitions, and
 observations needed for the invariant. Make initialization, transition guards,
@@ -63,25 +68,28 @@ condition and preservation across every modeled transition before claiming an
 invariant for every model-reachable state. Keep theorem premises visible in
 the report and in the implementation test plan.
 
-The theorem's quantifiers describe the model, not automatically the executable
-program. A symbolic theorem can cover every value in an infinite mathematical
-domain represented by the model without testing every runtime value. The
-implementation therefore does not need infinitely many tests. Derive a finite,
-proof-informed set of corner, boundary, and representative cases for runtime
-conformance, while stating clearly that the finite tests are evidence rather
-than a symbolic proof that the implementation realizes the model.
+Generate obligations whose types connect the current model to the independent
+specification. Separate safety, functional, and invariant or termination
+obligations where those claims matter. If translation soundness is checked,
+compose it with the user proof and check the final theorem about source
+semantics. State whether the theorem starts from source bytes, an AST, or IR.
+Without that translation evidence, the theorem's quantifiers describe the
+model only. Derive finite, proof-informed cases for runtime conformance, while
+stating that finite tests do not prove symbolic source/model equivalence.
 
-## 5. Derive conformance tests
+## 5. Derive conformance tests when useful
 
-Generate a finite set of test cases and expected observations from proved
-partitions, constructors, relations, or transition guards. Include corner,
+When runtime comparison is useful, generate a finite set of test cases and
+expected observations from proved partitions, constructors, relations, or
+transition guards. Include corner,
 boundary, and representative cases, retaining the accepted and rejected
 distinctions used by the proof. The proof informs the cases; it does not make a
 finite test run equivalent to the proof.
 Read [testing.md](testing.md) for generator design, finite-domain completeness,
 stateful traces, and adapter review.
 
-The conformance test adapter is the sole bridge to the implementation. It must
+When no checked translation relation exists, the conformance test adapter is
+the implementation bridge. It must
 be small enough to review and explicit about:
 
 - how model inputs become implementation inputs;
@@ -159,7 +167,7 @@ Report:
 - finite, infinite, or stateful coverage class; and
 - unresolved gaps, skipped cases, and unknowns.
 
-Say exactly what the theorem establishes and what the implementation tests
-only support. A proof about a model is not by itself a proof about executable
-source, and finite conformance tests do not turn an incomplete model into a
-complete specification.
+Say exactly what the theorem establishes and what implementation tests only
+support. A source-level theorem requires checked translation evidence for its
+stated frontend boundary. Finite conformance tests do not turn an incomplete
+model into a complete specification.

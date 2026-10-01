@@ -7,8 +7,9 @@
 ## Give important behavior a contract — not just a prompt
 
 `formal-spec` is proof-first behavior development for coding agents. It turns a
-product request into a formal statement of intent, reasons about the behavior
-that matters, and carries the result into implementation checks.
+product request into an independent formal specification, connects it to a
+program model through checked obligations, and uses the resulting proofs to
+guide implementation checks.
 
 The result compounds. Future changes must preserve the invariants that matter
 or deliberately revise them — not silently drift past them. When a proof
@@ -40,17 +41,21 @@ A corrected guard preserves the invariant across all 126 cases in the declared f
 ## The controlled proof-first loop
 
 ```text
-intent → formal spec → model → proof / refinement
-      → proof-derived implementation tests
-      → implementation → feedback to the spec / model
+source → justified translation → Lean model
+independent spec + Lean model → generated obligations → user proofs
+translation soundness + user proofs → source-semantic theorem
+model-derived tests → separate runtime evidence
 ```
 
 - **Intent** states behavior, boundaries, assumptions, and exclusions.
 - **Formal spec** records what the product must preserve independently of the
   current implementation.
 - **Model** captures only the relevant behavior, and only when needed.
-- **Proof / refinement** checks that the model satisfies the specification.
-- **Tests** compare implementation behavior with the proved target.
+- **Obligations and proofs** check that the model satisfies the specification.
+- **Translation soundness** lets the final theorem concern formal source
+  semantics when the frontend boundary is justified.
+- **Tests** compare executable behavior with the proved target on declared
+  cases.
 - **Feedback** returns failures to the earliest false layer instead of
   weakening the contract to make a build green.
 
@@ -76,15 +81,18 @@ AI is making formal authoring and proof repair practical inside ordinary work.
 
 ## What remains checked and human
 
-A proof checks a theorem about the written specification and model. It does not
-establish that production source matches the model; that correspondence still
-needs human review, tests, and operational checks. `LibSpec`, a small reusable
-library for relation and transition proofs, ships with the skill.
+A model proof alone does not establish that production source matches the
+model. A checked translation theorem can establish that relationship for its
+defined source semantics; exact source bytes and deployed executables require
+additional justified frontend and runtime boundaries. Otherwise, reviewed
+conformance tests provide finite implementation evidence. `LibSpec`, a small
+reusable library for relation and transition proofs, ships with the skill.
 
 ## Learn more
 
 - [Skill instructions](skill/SKILL.md)
 - [Controlled development loop](skill/references/workflow.md)
+- [Source-level architecture and checked example](skill/references/verification-architecture.md)
 - [Model-derived testing](skill/references/testing.md)
 - [Readable specifications](skill/references/descriptions.md)
 - [LibSpec](skill/LibSpec/)

@@ -1,22 +1,23 @@
 ---
 name: formal-spec
-description: Use selective Lean specifications, proofs, and model-derived conformance tests for consequential behavior, invariants, protocols, and state transitions. Do not use for cosmetic changes or requests with no meaningful behavioral claim.
+description: Use selective Lean specifications and proofs for consequential behavior, with source-level claims through checked translation or finite conformance evidence when translation is unavailable. Skip cosmetic changes.
 ---
 
 # Formal Spec
 
-`formal-spec` is proof-first development for consequential behavior. It
-controls the loop:
+`formal-spec` is proof-first development for consequential behavior. Its core
+artifacts are:
 
 ```text
-intent → spec → model → proof → tests → implementation → feedback
+program model + independent specification + obligations + proofs
 ```
 
-Use the loop to make behavior changes converge on a checked contract. The
-specification states the intended behavior. A small model represents only the
-behavior needed for the proof. A theorem checks the model against the
-specification. Model-derived conformance tests exercise the real
-implementation through a reviewed test adapter.
+The specification states intended behavior independently of the source. A
+proof discharges an obligation tying the model to that specification. When a
+checked translation theorem connects the source semantics to the model, compose
+the two proofs into a theorem about the source program. Otherwise, use
+model-derived conformance tests against the executable and report the smaller
+claim supported by that evidence.
 
 Do not formalize every change. Formalize an invariant when its failure would
 materially affect users, data, money, access, compatibility, safety, or a
@@ -26,7 +27,10 @@ changes and low-consequence work.
 Read [references/workflow.md](references/workflow.md) before starting a
 consequential formal change. Read
 [references/testing.md](references/testing.md) when deriving, reviewing, or
-describing conformance-test coverage.
+describing conformance-test coverage. Read
+[references/verification-architecture.md](references/verification-architecture.md)
+when building or reviewing source-level translation, generated obligations, or
+proof-carrying models.
 
 ## Follow the proof-first loop
 
@@ -36,38 +40,43 @@ describing conformance-test coverage.
    Lean predicate, relation, data type, or transition system. Include an
    accepted case and a rejected or boundary case. Keep the specification
    independent of the current implementation.
-3. **Model on demand.** Add the smallest model needed to reason about the
-   consequential invariant or to guide a new implementation. Do not translate
-   a whole project or build a source-language backend.
-4. **Prove the invariant.** State a theorem that visibly mentions the model
-   and specification. Keep assumptions explicit. For stateful behavior, prove
-   the initial-state condition and transition preservation needed for the
-   invariant.
-5. **Derive conformance tests.** Generate a finite, proof-informed set of
-   corner, boundary, and representative cases from proved partitions,
-   constructors, relations, or transition guards. A symbolic proof can cover
-   every value in the modeled domain, so the implementation does not need
-   infinitely many tests. Run the finite cases against the real implementation
-   through a small test adapter.
-6. **Review the adapter.** Review how the adapter constructs inputs, invokes
+3. **Model the selected program.** Add the smallest source semantics and Lean
+   model needed for the claim. If a translator is used, prove its correctness
+   or check a certificate for the actual AST and model. State whether the
+   source boundary is bytes, parsed AST, IR, or another representation.
+4. **Generate obligations and prove them.** Make each obligation visibly tie
+   the current model to the independent spec. Separate safety, functional,
+   and invariant or termination claims when relevant. Keep assumptions
+   explicit. For stateful behavior, prove the initial-state condition and
+   transition preservation needed for the invariant.
+5. **Compose source correctness when justified.** Combine translation
+   soundness with the model-to-spec proof. State the final theorem against
+   source semantics. If there is no checked source-to-model relation, keep the
+   result explicitly at model level.
+6. **Derive conformance tests when useful.** Generate a finite, proof-informed
+   set of corner, boundary, and representative cases from proved partitions,
+   constructors, relations, or transition guards. Run the finite cases against
+   the real implementation through a small test adapter.
+7. **Review any adapter.** Review how the adapter constructs inputs, invokes
    the implementation, observes outputs, errors, state, and effects, and
    handles setup, cleanup, nondeterminism, and external assumptions. The
    adapter review is part of the formal change.
-7. **Implement and execute.** Run the model-derived conformance tests and the
-   ordinary implementation test suite. Keep the formal theorem and test
-   evidence separate.
-8. **Reconcile surprises.** Feed unexpected production or test behavior back
+8. **Implement and execute.** Check the translation certificate or theorem,
+   generated obligations, and user proofs with Lean. Run applicable
+   model-derived conformance tests and ordinary implementation tests. Keep the
+   formal theorem and test evidence separate.
+9. **Reconcile surprises.** Feed unexpected production or test behavior back
    into the specification or model. Classify the issue before changing an
    expected result: source defect, model gap, adapter defect, missing
    requirement, changed intent, or environmental assumption.
 
-The model-derived conformance tests are the only bridge from the formal work
-to the implementation. A source path, hash, annotation, generated report, or
-similar metadata is not implementation evidence. Adapter review checks the
-mapping and its assumptions; it does not turn a finite test suite into a
-symbolic proof of implementation equivalence. Do not claim that a theorem
-about a model proves the executable source correct without the conformance
-tests and a reviewed adapter.
+A source path, hash, annotation, or generated report is not translation
+evidence. A checked source-to-model theorem can support a source-semantic
+claim within its stated boundary. Without one, a reviewed adapter and finite
+conformance tests provide only finite implementation evidence; they do not
+establish symbolic equivalence. Neither route silently proves that source
+bytes were parsed faithfully or that a deployed executable preserves the
+modeled semantics.
 
 ## State coverage precisely
 
@@ -80,8 +89,8 @@ Use exact coverage language:
   are generated from a proved partition. Derive corner, boundary, and
   representative cases instead of attempting infinitely many tests. A
   symbolic theorem may quantify over every value represented by the model and
-  its assumptions, but it does not establish that the implementation matches
-  the model for all such values.
+  its assumptions. A composed translation theorem can extend that claim to
+  source semantics within its proved boundary.
 - **Stateful systems:** an inductive proof can cover every model-reachable
   state when initialization and transition premises are proved. Executable
   conformance tests cover only the finite traces, initial states, and effects
@@ -95,13 +104,16 @@ adapter does not represent.
 
 - **Specification:** the user's normative intent, independent of current
   source behavior.
-- **Model:** the smallest account of behavior needed by the proof. Add it only
-  for a consequential invariant or a design where the model materially
-  clarifies implementation.
-- **Proof:** a checked theorem connecting that model to the specification.
+- **Model:** the smallest account of behavior needed by the proof. Add it for a
+  consequential claim or a design where the model materially clarifies
+  implementation.
+- **Obligations:** exact theorem types connecting the current model and spec,
+  with safety, functional, and invariant or termination claims as needed.
+- **Proof:** checked terms inhabiting those obligations and, where justified,
+  a composition theorem for the source program.
   Do not use `sorry`, `admit`, unapproved axioms, or unsafe escapes.
 - **Conformance tests:** cases and expected observations derived from proved
-  behavior and run against the implementation through the reviewed adapter.
+  behavior and run against the implementation through a reviewed adapter.
 
 Reuse an existing specification, model, and theorem when they already cover
 the behavior. Extend them when the invariant genuinely changes. Do not weaken
@@ -162,8 +174,9 @@ generated document does not establish implementation conformance.
 
 ## Finish with exact evidence
 
-Report the behavior boundary, specification declarations, checked theorem
-names, modeled behavior, generated conformance tests, adapter review, test
-commands and results, coverage class, and remaining assumptions. Call missing
-evidence `unknown`. Do not promote a finite test sample, successful
-compilation, or a theorem about an incomplete model into a stronger claim.
+Report the source boundary, specification, generated obligations, checked
+translation and correctness theorems, modeled behavior, applicable conformance
+tests and adapter review, commands and results, coverage class, and remaining
+assumptions. Call missing evidence `unknown`. Do not promote a finite test
+sample, successful compilation, or a theorem about an incomplete model into a
+stronger claim.
